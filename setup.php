@@ -31,6 +31,33 @@ if(empty($database_idquote)) $database_idquote = '`';
  * plugin_autom8thold_install    - Initialize the plugin and setup all hooks
  */
 function plugin_autom8thold_install() {	
+
+	#api_plugin_register_hook('PLUGINNAME', 'HOOKNAME', 'CALLBACKFUNCTION', 'FILENAME');
+	#api_plugin_register_realm('PLUGINNAME', 'FILENAMETORESTRICT', 'DISPLAYTEXT', true);
+
+	# setup all forms needed
+	api_plugin_register_hook('autom8thold', 'config_settings', 'autom8thold_config_settings', 'setup.php');
+	# graph provide navigation texts
+	api_plugin_register_hook('autom8thold', 'draw_navigation_text', 'autom8thold_draw_navigation_text', 'setup.php');
+	
+	# register all php modules required for this plugin
+	api_plugin_register_realm('autom8thold', 'autom8_thold_rules.php', 'Plugin Automate -> Maintain Threshold Rules', true);
+	
+	# add plugin_autom8_thold_rule_items table
+	$data = array();
+	$data['columns'][] = array('name' => 'id', 			'type' => 'mediumint(8)', 'unsigned' => 'unsigned', 'NULL' => false, 'auto_increment' => true);
+	$data['columns'][] = array('name' => 'rule_id',		'type' => 'mediumint(8)', 'unsigned' => 'unsigned', 'NULL' => false, 'default' => 0);
+	$data['columns'][] = array('name' => 'sequence',	'type' => 'smallint(3)', 'unsigned' => 'unsigned', 'NULL' => false, 'default' => 0);
+	$data['columns'][] = array('name' => 'operation',	'type' => 'smallint(3)', 'unsigned' => 'unsigned', 'NULL' => false, 'default' => 0);
+	$data['columns'][] = array('name' => 'field',		'type' => 'varchar(255)', 'NULL' => true,  'default' => '');
+	$data['columns'][] = array('name' => 'operator',	'type' => 'smallint(3)', 'unsigned' => 'unsigned', 'NULL' => true, 'default' => 0);
+	$data['columns'][] = array('name' => 'pattern', 	'type' => 'varchar(255)', 'NULL' => true,  'default' => '');
+	$data['primary'] = 'id';
+	$data['keys'][] = array('name'=> 'rule_id', 'columns' => 'rule_id');
+	$data['type'] = 'MyISAM';
+	$data['comment'] = 'Autom8 Threshold Rule Items';
+	api_plugin_db_table_create ('autom8thold', 'plugin_autom8_thold_rule_items', $data);
+	
 }
 
 /**
@@ -61,6 +88,53 @@ function autom8thold_version() {
 		'email'		=> 'thomas.casteleyn@super-visions.com',
 		'homepage'	=> 'https://github.com/Super-Visions/cacti-plugin-autom8thold'
     );
+}
+
+/**
+ * autom8thold_draw_navigation_text    - Draw navigation texts
+ * @param array $nav            - all current navigation texts
+ * returns array                - updated navigation texts
+ */
+function autom8thold_draw_navigation_text($nav) {
+	// Displayed navigation text under the blue tabs of Cacti
+	$nav["autom8_thold_rules.php:"] 			= array("title" => "Threshold Rules", "mapping" => "index.php:", "url" => "autom8_thold_rules.php", "level" => "1");
+	$nav["autom8_thold_rules.php:edit"] 		= array("title" => "(Edit)", "mapping" => "index.php:,autom8_thold_rules.php:", "url" => "", "level" => "2");
+	$nav["autom8_thold_rules.php:actions"] 	= array("title" => "Actions", "mapping" => "index.php:,autom8_thold_rules.php:", "url" => "", "level" => "2");
+	$nav["autom8_thold_rules.php:item_edit"]	= array("title" => "Threshold Rule Items", "mapping" => "index.php:,autom8_thold_rules.php:,autom8_thold_rules.php:edit", "url" => "", "level" => "3");
+	
+    return $nav;
+}
+
+/**
+ * autom8thold_config_settings    - configuration settings for this plugin
+ */
+function autom8thold_config_settings() {
+    global $tabs, $settings, $plugins;
+
+    if (isset($_SERVER['PHP_SELF']) && basename($_SERVER['PHP_SELF']) != 'settings.php' || isset($plugins['autom8']))
+        return;
+	
+    $temp = array(
+        "autom8_thold_enabled" => array(
+			"method" => "checkbox",
+			"friendly_name" => "Enable Autom8 Threshold creation",
+			"description" => "When disabled, Autom8 will not actively create Thresholds.<br>" .
+				"This will be useful when fiddeling around with Hosts and Graphs to avoid creating Thresholds each time you save an object.<br>" .
+				"Invoking Rules manually will still be possible.",
+			"default" => "",
+		),
+    );
+
+    /* create a new Settings Tab, if not already in place */
+    if (!isset($tabs["misc"])) {
+        $tabs["misc"] = "Misc";
+    }
+
+    /* and merge own settings into it */
+    if (isset($settings["misc"]))
+        $settings["misc"] = array_merge($settings["misc"], $temp);
+    else
+        $settings["misc"] = $temp;
 }
 
 ?>
