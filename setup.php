@@ -109,13 +109,13 @@ function autom8thold_draw_navigation_text($nav) {
  * autom8thold_config_settings    - configuration settings for this plugin
  */
 function autom8thold_config_settings() {
-    global $tabs, $settings, $plugins;
+	global $tabs, $settings, $plugins;
 
-    if (isset($_SERVER['PHP_SELF']) && basename($_SERVER['PHP_SELF']) != 'settings.php' || isset($plugins['autom8']))
-        return;
-	
-    $temp = array(
-        "autom8_thold_enabled" => array(
+	if (isset($_SERVER['PHP_SELF']) && basename($_SERVER['PHP_SELF']) != 'settings.php' || isset($plugins['autom8']))
+		return;
+
+	$temp = array(
+		"autom8_thold_enabled" => array(
 			"method" => "checkbox",
 			"friendly_name" => "Enable Autom8 Threshold creation",
 			"description" => "When disabled, Autom8 will not actively create Thresholds.<br>" .
@@ -123,18 +123,19 @@ function autom8thold_config_settings() {
 				"Invoking Rules manually will still be possible.",
 			"default" => "",
 		),
-    );
+	);
 
-    /* create a new Settings Tab, if not already in place */
-    if (!isset($tabs["misc"])) {
-        $tabs["misc"] = "Misc";
-    }
+	// find position of other autom8 settings
+	$lastpos = 0;
+	foreach(array_keys($settings["misc"]) as $pos => $key){
+		if(substr($key, 0, 6) == 'autom8') $lastpos = $pos;
+	}
 
-    /* and merge own settings into it */
-    if (isset($settings["misc"]))
-        $settings["misc"] = array_merge($settings["misc"], $temp);
-    else
-        $settings["misc"] = $temp;
+	// merge own settings
+	if($lastpos > 0){
+		$settings["misc"] = array_merge(array_slice($settings["misc"], 0, $lastpos+1), $temp, array_slice($settings["misc"], $lastpos+1));
+	}
+
 }
 
 ?>
