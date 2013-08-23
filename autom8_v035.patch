@@ -1,0 +1,203 @@
+diff -ru v035/autom8_actions.php custom/autom8_actions.php
+--- v035/autom8_actions.php	2010-12-12 11:08:41.000000000 +0100
++++ custom/autom8_actions.php	2013-08-01 11:36:05.000000000 +0200
+@@ -81,6 +81,8 @@
+ 		if (isset($_POST["selected_items"])) {
+ 			$selected_items = unserialize(stripslashes($_POST["selected_items"]));
+ 			autom8_log(__FUNCTION__ . ", items: " . $_POST["selected_items"], true, "AUTOM8 TRACE", POLLER_VERBOSITY_MEDIUM);
++			
++			$selected_items = api_plugin_hook_function('autom8_device_action', $selected_items);
+ 
+ 			/* work on all selected hosts */
+ 			for ($i=0;($i<count($selected_items));$i++) {
+@@ -210,6 +212,8 @@
+ 		/* find out which (if any) hosts have been checked, so we can tell the user */
+ 		if (isset($_POST["selected_items"])) {
+ 			$selected_items = unserialize(stripslashes($_POST["selected_items"]));
++			
++			$selected_items = api_plugin_hook_function('autom8_graph_action', $selected_items);
+ 
+ 			/* work on all selected graphs */
+ 			for ($i=0;($i<count($selected_items));$i++) {
+@@ -231,4 +235,80 @@
+ 	restore_error_handler();
+ 	return $action;
+ }
++
++/**
++ * Setup the new dropdown action for Data Source Management
++ * @arg $action		actions to be performed from dropdown
++ */
++function autom8_data_source_action_array($action) {
++	$action['plugin_autom8_data_source'] = 'Apply Autom8 Rules to Data Source(s)';
++	return $action;
++}
++
++
++function autom8_data_source_action_prepare($save) {
++	# globals used
++	global $config, $colors;
++	include_once($config['base_path'] . "/plugins/autom8/autom8_utilities.php");
++	autom8_log("autom8_ds_action_prepare called", true, "AUTOM8 TRACE", POLLER_VERBOSITY_MEDIUM);
++
++	/* suppress warnings */
++	error_reporting(0);
++
++	/* install own error handler */
++	set_error_handler("autom8_error_handler");
++
++	# it's our turn
++	if ($save["drp_action"] == "plugin_autom8_data_source") { /* autom8 */
++		/* find out which (if any) ds have been checked, so we can tell the user */
++		if (isset($save["ds_array"])) {
++
++			/* list affected data sources */
++			print "<tr>";
++			print "<td class='textArea' bgcolor='#" . $colors["form_alternate1"] . "'>" .
++				"<p>Are you sure you want to apply <strong>Autom8 Rules</strong> to the following data sources?</p><ul>" .
++			$save["ds_list"] . "</ul></td>";
++			print "</tr>";
++		}
++	}
++
++	/* restore original error handler */
++	restore_error_handler();
++	return $save;			# required for next hook in chain
++}
++
++/**
++ * autom8_data_source_action_execute - execute the device action
++ * @arg $action				action to be performed
++ * return				-
++ *  */
++function autom8_data_source_action_execute($action) {
++	global $config;
++	include_once($config['base_path'] . "/plugins/autom8/autom8_functions.php");
++	include_once($config['base_path'] . "/plugins/autom8/autom8_utilities.php");
++	autom8_log(__FUNCTION__ . " called", true, "AUTOM8 TRACE", POLLER_VERBOSITY_MEDIUM);
++
++	/* suppress warnings */
++	error_reporting(0);
++
++	/* install own error handler */
++	set_error_handler("autom8_error_handler");
++
++	# it's our turn
++	if ($action == "plugin_autom8_data_source") { /* autom8 */
++		autom8_log(__FUNCTION__ . " called, action: " . $action, true, "AUTOM8 TRACE", POLLER_VERBOSITY_MEDIUM);
++		/* find out which (if any) hosts have been checked, so we can tell the user */
++		if (isset($_POST["selected_items"])) {
++			$selected_items = unserialize(stripslashes($_POST["selected_items"]));
++			autom8_log(__FUNCTION__ . ", items: " . $_POST["selected_items"], true, "AUTOM8 TRACE", POLLER_VERBOSITY_MEDIUM);
++
++			api_plugin_hook_function('autom8_data_source_action', $selected_items);
++		}
++	}
++
++	/* restore original error handler */
++	restore_error_handler();
++	autom8_log(__FUNCTION__ . " exits", true, "AUTOM8 TRACE", POLLER_VERBOSITY_MEDIUM);
++	return $action;
++}
+ ?>
+diff -ru v035/autom8_functions.php custom/autom8_functions.php
+--- v035/autom8_functions.php	2010-12-12 11:08:35.000000000 +0100
++++ custom/autom8_functions.php	2013-07-31 14:59:10.000000000 +0200
+@@ -176,7 +176,7 @@
+ 			AND graph_templates_item.task_item_id = data_template_rrd.id
+ 			LIMIT 1");
+ 
+-		autom8_log(__FUNCTION__ . " Host[" . $data["host_id"] . "] Not Adding Graph - this graph already exists - graph-id: ($existsAlready) - data-source-id: ($dataSourceId)", false, "AUTOM8");
++		autom8_log(__FUNCTION__ . " Host[" . $data["host_id"] . "] Not Adding Graph - this graph already exists - graph-id: ($existsAlready) - data-source-id: ($dataSourceId)", false, "AUTOM8", POLLER_VERBOSITY_MEDIUM);
+ 		return;
+ 	}else{
+ 		# input fields are not supported
+@@ -194,7 +194,7 @@
+ 		}
+ 	}
+ 
+-	autom8_log(__FUNCTION__ . " Host[" . $data["host_id"] . "] Graph Added - graph-id: (" . $returnArray["local_graph_id"] . ") - data-source-ids: ($dataSourceId)", false, "AUTOM8");
++	autom8_log(__FUNCTION__ . " Host[" . $data["host_id"] . "] Graph Added - graph-id: (" . $returnArray["local_graph_id"] . ") - data-source-ids: ($dataSourceId)", false, "AUTOM8", POLLER_VERBOSITY_MEDIUM);
+ }
+ 
+ 
+@@ -408,6 +408,9 @@
+ 		$graph_template_id = db_fetch_cell("SELECT graph_template_id FROM snmp_query_graph WHERE id=" . $rule["graph_type_id"]);
+ 		autom8_log(__FUNCTION__ . " Host[" . $host_id . "] - graph template: $graph_template_id", false, "AUTOM8 TRACE", POLLER_VERBOSITY_MEDIUM);
+ 
++		$graphs_added = 0;
++		$graphs_existing = 0;
++		
+ 		foreach ($snmp_query_indexes as $snmp_index) {
+ 			$snmp_query_array["snmp_index"] = $snmp_index["snmp_index"];
+ 			autom8_log(__FUNCTION__ . " Host[" . $host_id . "] - checking index: " . $snmp_index["snmp_index"], false, "AUTOM8 TRACE", POLLER_VERBOSITY_MEDIUM);
+@@ -425,7 +428,8 @@
+ 
+ 			$existsAlready = db_fetch_cell($sql);
+ 			if (isset($existsAlready) && $existsAlready > 0) {
+-				autom8_log(__FUNCTION__ . " Host[" . $host_id . "] Not Adding Graph - this graph already exists - DS[$existsAlready]", false, "AUTOM8");
++				$graphs_existing++;
++				autom8_log(__FUNCTION__ . " Host[" . $host_id . "] Not Adding Graph - this graph already exists - DS[$existsAlready]", false, "AUTOM8", POLLER_VERBOSITY_MEDIUM);
+ 				continue;
+ 			}
+ 
+@@ -451,11 +455,14 @@
+ 					}
+ 				}
+ 
+-				autom8_log(__FUNCTION__ . " Host[" . $host_id . "] Graph Added - graph-id: (" . $return_array["local_graph_id"] . ") - data-source-ids: ($data_source_id)", false, "AUTOM8");
++				$graphs_added++;
++				autom8_log(__FUNCTION__ . " Host[" . $host_id . "] Graph Added - graph-id: (" . $return_array["local_graph_id"] . ") - data-source-ids: ($data_source_id)", false, "AUTOM8", POLLER_VERBOSITY_MEDIUM);
+ 			} else {
+ 				autom8_log(__FUNCTION__ . " Host[" . $host_id . "] WARNING: Graph Not Added", false, "AUTOM8");
+ 			}
+ 		}
++		
++		autom8_log(__FUNCTION__ . " STATS: Host[" . $host_id . "] Added graphs: " . $graphs_added . " - Existing graphs: " . $graphs_existing . " - rule: " . $rule['name'], false, "AUTOM8", POLLER_VERBOSITY_LOW);
+ 
+ 	}
+ }
+@@ -593,7 +600,7 @@
+ 										$host_id, $rule["host_grouping_type"], $item["sort_type"], $propagate);
+ 
+ 	if (isset($new_item) && $new_item > 0) {
+-		autom8_log(__FUNCTION__ . " Parent[" . $parent_tree_item_id . "] Tree Item added - id: (" . $new_item . ") Title: (" .$title . ")", false, "AUTOM8");
++		autom8_log(__FUNCTION__ . " Parent[" . $parent_tree_item_id . "] Tree Item added - id: (" . $new_item . ") Title: (" .$title . ")", false, "AUTOM8", POLLER_VERBOSITY_MEDIUM);
+ 	} else {
+ 		autom8_log(__FUNCTION__ . " WARNING: Parent[" . $parent_tree_item_id . "] Tree Item not added", false, "AUTOM8");
+ 	}
+@@ -625,7 +632,7 @@
+ 										$host_id, $rule["host_grouping_type"], $sort_type, $propagate);
+ 
+ 	if (isset($new_item) && $new_item > 0) {
+-		autom8_log(__FUNCTION__ . " Host[" . $host_id . "] Tree Item added - id: (" . $new_item . ")", false, "AUTOM8");
++		autom8_log(__FUNCTION__ . " Host[" . $host_id . "] Tree Item added - id: (" . $new_item . ")", false, "AUTOM8", POLLER_VERBOSITY_MEDIUM);
+ 	} else {
+ 		autom8_log(__FUNCTION__ . " WARNING: Host[" . $host_id . "] Tree Item not added", false, "AUTOM8");
+ 	}
+@@ -657,7 +664,7 @@
+ 										$host_id, $rule["host_grouping_type"], $sort_type, $propagate);
+ 
+ 	if (isset($new_item) && $new_item > 0) {
+-		autom8_log(__FUNCTION__ . " Graph[" . $graph_id . "] Tree Item added - id: (" . $new_item . ")", false, "AUTOM8");
++		autom8_log(__FUNCTION__ . " Graph[" . $graph_id . "] Tree Item added - id: (" . $new_item . ")", false, "AUTOM8", POLLER_VERBOSITY_MEDIUM);
+ 	} else {
+ 		autom8_log(__FUNCTION__ . " Graph[" . $graph_id . "] WARNING: Tree Item not added", false, "AUTOM8");
+ 	}
+diff -ru v035/setup.php custom/setup.php
+--- v035/setup.php	2010-12-12 11:08:09.000000000 +0100
++++ custom/setup.php	2013-07-31 15:37:51.000000000 +0200
+@@ -98,6 +98,13 @@
+ 	# graph hook: Graph Management Action dropdown selected: execute list of graphs
+ 	api_plugin_register_hook('autom8', 'graphs_action_execute', 'autom8_graph_action_execute', 'autom8_actions.php');
+ 
++	# data source hook: Add a new dropdown Action for Data Source Management
++	api_plugin_register_hook('autom8', 'data_source_action_array', 'autom8_data_source_action_array', 'autom8_actions.php');
++	# data source hook: Data Source Management Action dropdown selected: prepare the list of data sources for a confirmation request
++	api_plugin_register_hook('autom8', 'data_source_action_prepare', 'autom8_data_source_action_prepare', 'autom8_actions.php');
++	# data source hook: Data Source Management Action dropdown selected: execute list of data sources
++	api_plugin_register_hook('autom8', 'data_source_action_execute', 'autom8_data_source_action_execute', 'autom8_actions.php');
++
+ 	autom8_setup_table ();
+ }
+ 
