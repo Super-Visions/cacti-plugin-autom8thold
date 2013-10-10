@@ -8,6 +8,9 @@ This plugin allows to create rules similar to Autom8 Graph - and Tree Rules to s
 
 ## Features
 
+* Define Rules based on existing Data Queries
+* Preview of matching Hosts and Data Sources
+
 ## Prerequisites
 
 ## Installation

@@ -99,7 +99,7 @@ function plugin_autom8thold_version() {
 function autom8thold_version() {
     return array(
     	'name'		=> 'Autom8-Thold',
-		'version'	=> '0.0.1',
+		'version'	=> '0.1.0',
 		'longname'	=> 'Automate threshold creation for data sources',
 		'author'	=> 'Thomas Casteleyn',
 		'email'		=> 'thomas.casteleyn@super-visions.com',
