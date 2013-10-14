@@ -292,7 +292,7 @@ function autom8_thold_rules_form_actions() {
 
 	html_end_box();
 
-	include_once($config['include_path'] . 'bottom_footer.php');
+	include_once($config['include_path'] . '/bottom_footer.php');
 }
 
 /* --------------------------
