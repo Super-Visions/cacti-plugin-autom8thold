@@ -42,6 +42,8 @@ function plugin_autom8thold_install() {
 	api_plugin_register_hook('autom8thold', 'config_form', 'autom8thold_config_form', 'setup.php');
 	# graph provide navigation texts
 	api_plugin_register_hook('autom8thold', 'draw_navigation_text', 'autom8thold_draw_navigation_text', 'setup.php');
+	# setup actions
+	api_plugin_register_hook('autom8thold', 'autom8_data_source_action', 'autom8thold_data_source_action', 'setup.php');
 	
 	# register all php modules required for this plugin
 	api_plugin_register_realm('autom8thold', 'autom8_thold_rules.php', 'Plugin Automate -> Maintain Threshold Rules', true);
@@ -223,7 +225,97 @@ function autom8thold_config_settings() {
 	if($lastpos > 0){
 		$settings["misc"] = array_merge(array_slice($settings["misc"], 0, $lastpos+1), $temp, array_slice($settings["misc"], $lastpos+1));
 	}
+}
 
+/**
+ * Perform rule actions to selected data sources
+ * 
+ * @param array $selected_items
+ * @return array
+ */
+function autom8thold_data_source_action($selected_items){
+	global $config, $database_idquote, $autom8_op_array;
+	
+	include_once($config['base_path'].'/plugins/autom8thold/autom8_utilities.php');
+	
+	$id_list = implode(',', $selected_items);
+	
+	// return if we have wrong data
+	if(!preg_match('#^([0-9]+,)*[0-9]+$#', $id_list)) return $selected_items;
+	
+	// find possibly matching thold rules
+	$thold_rule_settings_sql = sprintf("SELECT DISTINCT 
+	thold_rule.id AS rule_id, 
+	thold_rule.*, 
+	thold_template.* 
+FROM data_template_data 
+JOIN thold_template 
+	USING(data_template_id) 
+JOIN thold_data thold 
+	ON(thold.template = thold_template.id) 
+JOIN plugin_autom8_thold_rules thold_rule 
+	ON(thold_rule.thold_template_id = thold_template.id) 
+WHERE thold_rule.enabled = 'on' 
+	AND local_data_id IN(%s);", $id_list );
+	$thold_rule_settings = db_fetch_assoc($thold_rule_settings_sql);
+	
+	// execute every rule to find matching DS
+	foreach ($thold_rule_settings as &$thold_rule) {
+		unset($thold_rule['id']);
+		
+		// get all used data query fields
+		$dq_fields = get_rule_dq_fields($thold_rule['rule_id'], 'plugin_autom8_thold_rule_items');
+		
+		// get rule items
+		$rule_items_where = build_rule_item_filter(get_rule_items($thold_rule['rule_id'], 'plugin_autom8_thold_rule_items'));
+		
+		// get match items
+		$match_items_where = build_matching_objects_filter($thold_rule['rule_id'], AUTOM8_RULE_TYPE_THOLD_MATCH);
+		
+		// build SQL query WHERE part
+		$sql_where = sprintf('dl.id IN(%s) ' . PHP_EOL . '	AND ( %s ) ' . PHP_EOL, $id_list, $match_items_where);
+		$sql_where .= empty($rule_items_where)? '	AND (1 ' . $autom8_op_array['op'][AUTOM8_OP_MATCHES_NOT] . ' 1) ' . PHP_EOL : '	AND ( ' . $rule_items_where . ' ) '.PHP_EOL;
+		$sql_where .= '	AND td.rra_id IS NULL '.PHP_EOL;
+
+		// build SQL query FROM part
+		$sql_from = sprintf('data_template_data AS dtd 
+LEFT JOIN thold_data AS td 
+	ON( dtd.local_data_id = td.rra_id AND td.template = %d ) 
+JOIN data_local AS dl 
+	ON( dl.id = dtd.local_data_id ) 
+JOIN ' . $database_idquote . 'host' . $database_idquote .' 
+	ON( host.id = dl.host_id ) 
+JOIN host_template 
+	ON ( host.host_template_id = host_template.id )	
+', $thold_rule['thold_template_id'] );
+	
+		// build SQL query SELECT part
+		$sql_select = '
+	dl.id, 
+	IFNULL(td.rra_id = dl.id, 0) AS present, 
+	dtd.name_cache '.PHP_EOL;
+	
+		// add some dynamical fields
+		foreach ($dq_fields as $dq_field){
+
+			$sql_from .= sprintf('
+LEFT JOIN host_snmp_cache AS hsc_%1$s 
+	ON( 
+		hsc_%1$s.host_id = dl.host_id AND 
+		hsc_%1$s.snmp_query_id = dl.snmp_query_id AND 
+		hsc_%1$s.snmp_index =  dl.snmp_index AND 
+		hsc_%1$s.field_name = \'%1$s\' 
+	) ' . PHP_EOL, $dq_field['field']);
+		
+		}
+		
+		// find matching DS
+		$data_item_list_sql = 'SELECT ' . $sql_select . 'FROM ' . $sql_from . 'WHERE ' . $sql_where . 'ORDER BY dtd.name_cache ASC;';
+		$data_item_list = db_fetch_assoc($data_item_list_sql);
+		
+	}
+	
+	return $selected_items;
 }
 
 ?>
