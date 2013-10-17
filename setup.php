@@ -234,9 +234,10 @@ function autom8thold_config_settings() {
  * @return array
  */
 function autom8thold_data_source_action($selected_items){
-	global $config, $database_idquote, $autom8_op_array;
+	global $config, $cnn_id, $database_idquote, $autom8_op_array;
 	
 	include_once($config['base_path'].'/plugins/autom8thold/autom8_utilities.php');
+	include_once($config['base_path'].'/plugins/thold/thold_functions.php');
 	
 	$id_list = implode(',', $selected_items);
 	
@@ -246,8 +247,8 @@ function autom8thold_data_source_action($selected_items){
 	// find possibly matching thold rules
 	$thold_rule_settings_sql = sprintf("SELECT DISTINCT 
 	thold_rule.id AS rule_id, 
-	thold_rule.*, 
-	thold_template.* 
+	thold_rule.thold_template_id, 
+	thold_template.data_source_id 
 FROM data_template_data 
 JOIN thold_template 
 	USING(data_template_id) 
@@ -261,7 +262,6 @@ WHERE thold_rule.enabled = 'on'
 	
 	// execute every rule to find matching DS
 	foreach ($thold_rule_settings as &$thold_rule) {
-		unset($thold_rule['id']);
 		
 		// get all used data query fields
 		$dq_fields = get_rule_dq_fields($thold_rule['rule_id'], 'plugin_autom8_thold_rule_items');
@@ -283,16 +283,23 @@ LEFT JOIN thold_data AS td
 	ON( dtd.local_data_id = td.rra_id AND td.template = %d ) 
 JOIN data_local AS dl 
 	ON( dl.id = dtd.local_data_id ) 
+JOIN data_template_rrd AS dtr 
+	ON( dtr.local_data_id = dl.id AND dtr.local_data_template_rrd_id = %d ) 
+JOIN graph_templates_item AS gti 
+	ON( gti.task_item_id = dtr.id ) 
 JOIN ' . $database_idquote . 'host' . $database_idquote .' 
 	ON( host.id = dl.host_id ) 
 JOIN host_template 
 	ON ( host.host_template_id = host_template.id )	
-', $thold_rule['thold_template_id'] );
+', $thold_rule['thold_template_id'], $thold_rule['data_source_id'] );
 	
 		// build SQL query SELECT part
 		$sql_select = '
-	dl.id, 
-	IFNULL(td.rra_id = dl.id, 0) AS present, 
+	dl.rra_id, 
+	dl.host_id, 
+	dtr.id AS data_id, 
+	gti.local_graph_id, 
+	gti.graph_template_id, 
 	dtd.name_cache '.PHP_EOL;
 	
 		// add some dynamical fields
@@ -310,9 +317,30 @@ LEFT JOIN host_snmp_cache AS hsc_%1$s
 		}
 		
 		// find matching DS
-		$data_item_list_sql = 'SELECT ' . $sql_select . 'FROM ' . $sql_from . 'WHERE ' . $sql_where . 'ORDER BY dtd.name_cache ASC;';
+		$data_item_list_sql = 'SELECT DISTINCT ' . $sql_select . 'FROM ' . $sql_from . 'WHERE ' . $sql_where . 'ORDER BY dtd.name_cache ASC;';
 		$data_item_list = db_fetch_assoc($data_item_list_sql);
 		
+		// do action with data items
+		foreach($data_item_list as $data_item){
+			
+			$insert_sql = sprintf("INSERT INTO thold_data (name, rra_id, data_id, graph_id, graph_template, host_id, template) VALUES ('%s', %d, %d, %d, %d, %d, %d);",
+				'test '. rand(100, 999), 
+				$data_item['rra_id'],
+				$data_item['data_id'],
+				$data_item['local_graph_id'],
+				$data_item['graph_template_id'],
+				$data_item['host_id'],
+				$thold_rule['thold_template_id']
+			);
+						
+			// create threshold
+			if(db_execute($insert_sql) && $id = $cnn_id->Insert_ID()){				
+				// update threshold with template defaults
+				thold_template_update_threshold($id, $thold_rule['thold_template_id']);
+				// log creation
+				plugin_thold_log_changes($id, 'created');
+			}
+		}
 	}
 	
 	return $selected_items;
