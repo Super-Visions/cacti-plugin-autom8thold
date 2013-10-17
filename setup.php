@@ -248,6 +248,7 @@ function autom8thold_data_source_action($selected_items){
 	$thold_rule_settings_sql = sprintf("SELECT DISTINCT 
 	thold_rule.id AS rule_id, 
 	thold_rule.thold_template_id, 
+	thold_template.data_source_name, 
 	thold_template.data_source_id 
 FROM data_template_data 
 JOIN thold_template 
@@ -295,7 +296,7 @@ JOIN host_template
 	
 		// build SQL query SELECT part
 		$sql_select = '
-	dl.rra_id, 
+	dl.id AS rra_id, 
 	dl.host_id, 
 	dtr.id AS data_id, 
 	gti.local_graph_id, 
@@ -324,7 +325,7 @@ LEFT JOIN host_snmp_cache AS hsc_%1$s
 		foreach($data_item_list as $data_item){
 			
 			$insert_sql = sprintf("INSERT INTO thold_data (name, rra_id, data_id, graph_id, graph_template, host_id, template) VALUES ('%s', %d, %d, %d, %d, %d, %d);",
-				'test '. rand(100, 999), 
+				thold_format_name($thold_rule, $data_item['local_graph_id'], $data_item['rra_id'], $thold_rule['data_source_name']), 
 				$data_item['rra_id'],
 				$data_item['data_id'],
 				$data_item['local_graph_id'],
