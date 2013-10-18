@@ -253,8 +253,6 @@ function autom8thold_data_source_action($selected_items){
 FROM data_template_data 
 JOIN thold_template 
 	USING(data_template_id) 
-JOIN thold_data thold 
-	ON(thold.template = thold_template.id) 
 JOIN plugin_autom8_thold_rules thold_rule 
 	ON(thold_rule.thold_template_id = thold_template.id) 
 WHERE thold_rule.enabled = 'on' 
