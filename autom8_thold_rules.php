@@ -97,7 +97,6 @@ function autom8_thold_rules_form_save() {
 		$save['name'] = form_input_validate(get_request_var_post('name'), 'name', '', false, 3);
 		$save['thold_template_id'] = form_input_validate(get_request_var_post('thold_template_id'), 'snmp_query_id', '^[0-9]+$', false, 3);
 		$save['snmp_query_id'] = form_input_validate(get_request_var_post('snmp_query_id', 0), 'snmp_query_id', '^[0-9]+$', false, 3);
-		$save['action'] = form_input_validate(get_request_var_post('ds_action', 0), 'ds_action', '^[0-9]$', false, 3);
 		$save['enabled'] = get_request_var_post('enabled') ? 'on' : '';
 		if (!is_error_message()) {
 			$rule_id = sql_save($save, 'plugin_autom8_thold_rules');
