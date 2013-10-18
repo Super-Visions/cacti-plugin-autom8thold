@@ -31,10 +31,10 @@ In order to get this plugin running, applying patches to the plugin Autom8 is re
 Run following commands from plugins directory:
 
 ```shell
-patch --dry-run -N -d autom8/ -i autom8thold/autom8_v035.patch
+patch --dry-run -d autom8/ < autom8thold/autom8_v035.patch
 ```
 
-If everything looks ok, you can omit the `--dry-run` option and run the commands again to actually do the patches. 
+If everything looks ok, you can omit the `--dry-run` option and run the command again to actually do the patches. 
 
 **Note:** The patch autom8_v035.patch might warn you about reverting patches if you have done this patch already for the plugin [Autom8-Reportit](https://github.com/Super-Visions/cacti-plugin-autom8reportit/). 
 In this case, you can ignore this patch as it is already done.
