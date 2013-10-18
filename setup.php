@@ -44,6 +44,8 @@ function plugin_autom8thold_install() {
 	api_plugin_register_hook('autom8thold', 'draw_navigation_text', 'autom8thold_draw_navigation_text', 'setup.php');
 	# setup actions
 	api_plugin_register_hook('autom8thold', 'autom8_data_source_action', 'autom8thold_data_source_action', 'setup.php');
+	# hook for creating tholds
+	api_plugin_register_hook('autom8thold', 'create_complete_graph_from_template', 'autom8thold_create_complete_graph_from_template', 'setup.php');
 	
 	# register all php modules required for this plugin
 	api_plugin_register_realm('autom8thold', 'autom8_thold_rules.php', 'Plugin Automate -> Maintain Threshold Rules', true);
@@ -343,6 +345,114 @@ LEFT JOIN host_snmp_cache AS hsc_%1$s
 	}
 	
 	return $selected_items;
+}
+
+/**
+ * Create thresholds when new graph has been created
+ * 
+ * @global array $config
+ * @param array $graph
+ * @return array
+ */
+function autom8thold_create_complete_graph_from_template($graph){
+	global $config, $cnn_id, $database_idquote, $autom8_op_array;
+	
+	if(read_config_option('autom8_thold_enabled') != 'on') return $graph;
+	
+	include_once($config['base_path'].'/plugins/autom8thold/autom8_utilities.php');
+	include_once($config['base_path'].'/plugins/thold/thold_functions.php');
+	
+	$thold_rule_settings_sql = sprintf("SELECT DISTINCT 
+	thold_rule.id AS rule_id, 
+	thold_rule.thold_template_id, 
+	thold_template.data_source_name, 
+	thold_template.data_source_id 
+FROM graph_templates_item gti 
+JOIN data_template_rrd dtr 
+	ON(dtr.id = gti.task_item_id) 
+JOIN thold_template 
+	ON(thold_template.data_source_id = dtr.local_data_template_rrd_id) 
+JOIN plugin_autom8_thold_rules thold_rule 
+	ON(thold_rule.thold_template_id = thold_template.id) 
+WHERE thold_rule.enabled = 'on' AND gti.local_graph_id = %d;", $graph['id']);
+	$thold_rule_settings = db_fetch_assoc($thold_rule_settings_sql);
+	
+	// execute every rule to find matching DS
+	foreach ($thold_rule_settings as &$thold_rule) {
+		
+		// get all used data query fields
+		$dq_fields = get_rule_dq_fields($thold_rule['rule_id'], 'plugin_autom8_thold_rule_items');
+		
+		// get rule items
+		$rule_items_where = build_rule_item_filter(get_rule_items($thold_rule['rule_id'], 'plugin_autom8_thold_rule_items'));
+		
+		// get match items
+		$match_items_where = build_matching_objects_filter($thold_rule['rule_id'], AUTOM8_RULE_TYPE_THOLD_MATCH);
+		
+		// build SQL query WHERE part
+		$sql_where = sprintf('gti.local_graph_id = %d ' . PHP_EOL . '	AND ( %s ) ' . PHP_EOL, $graph['id'], $match_items_where);
+		$sql_where .= empty($rule_items_where)? '	AND (1 ' . $autom8_op_array['op'][AUTOM8_OP_MATCHES_NOT] . ' 1) ' . PHP_EOL : '	AND ( ' . $rule_items_where . ' ) '.PHP_EOL;
+		$sql_where .= '	AND td.id IS NULL '.PHP_EOL;
+
+		// build SQL query FROM part
+		$sql_from = sprintf('graph_templates_item gti 
+JOIN data_template_rrd dtr 
+	ON( dtr.id = gti.task_item_id AND dtr.local_data_template_rrd_id = %d ) 
+LEFT JOIN thold_data AS td 
+	ON( dtr.local_data_id = td.rra_id AND td.template = %d ) 
+JOIN ' . $database_idquote . 'host' . $database_idquote .' 
+	ON( host.id = %d ) 
+JOIN host_template 
+	ON ( host.host_template_id = host_template.id )	
+', $thold_rule['data_source_id'], $thold_rule['thold_template_id'], $graph['host_id'] );
+	
+		// build SQL query SELECT part
+		$sql_select = '
+	dtr.local_data_id AS rra_id, 
+	dtr.id AS data_id '.PHP_EOL;
+	
+		// add some dynamical fields
+		foreach ($dq_fields as $dq_field){
+
+			$sql_from .= sprintf('
+LEFT JOIN host_snmp_cache AS hsc_%1$s 
+	ON( 
+		hsc_%1$s.host_id = host.id AND 
+		hsc_%1$s.snmp_query_id = %2$d AND 
+		hsc_%1$s.snmp_index =  %3$d AND 
+		hsc_%1$s.field_name = \'%1$s\' 
+	) ' . PHP_EOL, $dq_field['field'], $graph['snmp_query_id'], $graph['snmp_index']);
+		
+		}
+		
+		// find matching DS
+		$data_item_list_sql = 'SELECT DISTINCT ' . $sql_select . 'FROM ' . $sql_from . 'WHERE ' . $sql_where . ';';
+		$data_item_list = db_fetch_assoc($data_item_list_sql);
+		
+		// do action with data items
+		foreach($data_item_list as $data_item){
+			
+			$insert_sql = sprintf("INSERT INTO thold_data (name, rra_id, data_id, graph_id, graph_template, host_id, template) VALUES ('%s', %d, %d, %d, %d, %d, %d);",
+				thold_format_name($thold_rule, $graph['id'], $data_item['rra_id'], $thold_rule['data_source_name']), 
+				$data_item['rra_id'],
+				$data_item['data_id'],
+				$graph['id'],
+				$graph['graph_template_id'],
+				$graph['host_id'],
+				$thold_rule['thold_template_id']
+			);
+						
+			// create threshold
+			if(db_execute($insert_sql) && $id = $cnn_id->Insert_ID()){				
+				// update threshold with template defaults
+				thold_template_update_threshold($id, $thold_rule['thold_template_id']);
+				// log creation
+				plugin_thold_log_changes($id, 'created');
+			}
+		}
+	}
+	
+	return $graph;
 }
 
 ?>
