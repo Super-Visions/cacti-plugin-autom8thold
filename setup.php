@@ -177,8 +177,8 @@ function autom8thold_config_form () {
 FROM snmp_query sq 
 JOIN snmp_query_graph sqg 
 	ON (sqg.snmp_query_id = sq.id) 
-JOIN snmp_query_graph_rrd_sv sqgrs 
-	ON (sqgrs.snmp_query_graph_id = sqg.id ) 
+JOIN snmp_query_graph_rrd sqgr 
+	ON (sqgr.snmp_query_graph_id = sqg.id ) 
 JOIN thold_template tt
 	USING (data_template_id)
 WHERE 
