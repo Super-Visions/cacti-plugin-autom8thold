@@ -250,6 +250,7 @@ function autom8thold_data_source_action($selected_items){
 	$thold_rule_settings_sql = sprintf("SELECT DISTINCT 
 	thold_rule.id AS rule_id, 
 	thold_rule.thold_template_id, 
+	thold_rule.snmp_query_id, 
 	thold_template.data_source_name, 
 	thold_template.data_source_id 
 FROM data_template_data 
@@ -283,7 +284,7 @@ WHERE thold_rule.enabled = 'on'
 LEFT JOIN thold_data AS td 
 	ON( dtd.local_data_id = td.rra_id AND td.template = %d ) 
 JOIN data_local AS dl 
-	ON( dl.id = dtd.local_data_id ) 
+	ON( dl.id = dtd.local_data_id AND dl.snmp_query_id = %d ) 
 JOIN data_template_rrd AS dtr 
 	ON( dtr.local_data_id = dl.id AND dtr.local_data_template_rrd_id = %d ) 
 JOIN graph_templates_item AS gti 
@@ -292,7 +293,7 @@ JOIN ' . $database_idquote . 'host' . $database_idquote .'
 	ON( host.id = dl.host_id ) 
 JOIN host_template 
 	ON ( host.host_template_id = host_template.id )	
-', $thold_rule['thold_template_id'], $thold_rule['data_source_id'] );
+', $thold_rule['thold_template_id'], $thold_rule['snmp_query_id'], $thold_rule['data_source_id'] );
 	
 		// build SQL query SELECT part
 		$sql_select = '

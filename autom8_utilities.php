@@ -68,12 +68,12 @@ LIMIT 1;', $rule['id']);
 LEFT JOIN thold_data AS td 
 	ON( dtd.local_data_id = td.rra_id AND td.template = %d ) 
 JOIN data_local AS dl 
-	ON( dl.id = dtd.local_data_id ) 
+	ON( dl.id = dtd.local_data_id AND dl.snmp_query_id = %d ) 
 JOIN ' . $database_idquote . 'host' . $database_idquote .' 
 	ON( host.id = dl.host_id ) 
 JOIN host_template 
 	ON ( host.host_template_id = host_template.id )	
-', $thold['id'] );
+', $thold['id'], $rule['snmp_query_id'] );
 	
 	// build SQL query SELECT part
 	$sql_select = '
